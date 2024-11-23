@@ -6,7 +6,7 @@ int main() {
     char input[BUFFER_SIZE];
     while (1) {
         printf("hw1shell$ ");
-        scanf("%(BUFFER_SIZE-1)s",input);
+        fgets(input, BUFFER_SIZE, stdin);
     }
     return 0;
 }
