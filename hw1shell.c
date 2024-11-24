@@ -1,26 +1,10 @@
-#include <stdlib.h> // Required for free, malloc, etc.
-#include <stdio.h>  // For printf
-#include <string.h> // For strcmp
-#include <unistd.h> // For fork, execvp
-#include <sys/types.h> // For pid_t
-#include <sys/wait.h> // For waitpid
-#include <errno.h>  // For errno
-  
-#define BUFFER_SIZE 1024
-#define MAX_BG_CMD 4
-#define MAX_TOKENS 64
+// tests:
+// sleep 25 &
 
-void cd(const char* dir);
-void jobs();
-void exit_shell();
-void execute_cmd(char* tokens[]);
-void reap_background_processes();
+//to fix:
+// printing forground... when prompt is pwd. it doent suppoust to.
 
-typedef struct process {
-    int pid;
-    char command[256];
-    struct process* next;
-} ps;
+#include "hw1shell.h"
 
 ps* head = NULL;
 int running_cmds = 0;
@@ -30,7 +14,11 @@ int main() {
     char input[BUFFER_SIZE];
     char *tokens[MAX_TOKENS]; // define token array for parsing input from user
     int token_count = 0;
+    //bool not_exit = true;
  
+    token_count = 0;
+    memset(tokens, 0, sizeof(tokens)); // making sure array is clean
+
     while (1) {
         printf("hw1shell$ ");
         fgets(input, BUFFER_SIZE, stdin);
@@ -71,8 +59,9 @@ int main() {
 }
 
 // executes external command
+//TO FIX - parsing cmd with & , removing it 
 void execute_cmd(char* tokens[]){
-    if (is_background && running_cmds >= MAX_BG_CMD) {
+    if (is_background && running_cmds >= MAX_BG_CMD) { // not sure it needs to be here!
         fprintf(stderr, "hw1shell: too many background commands running\n");
         return;
     }
@@ -85,6 +74,7 @@ void execute_cmd(char* tokens[]){
     else if(pid == 0){ // the process is a child
         if (execvp(tokens[0], tokens) == -1) { // execute command using execvp
             printf("hw1shell: invalid command\n");
+            // add exec kill pid, because of fork, with get pid. suecide
             fprintf(stderr, "hw1shell: %s failed, errno is %d\n", "execvp", errno);
         }
     }
@@ -162,6 +152,8 @@ void reap_background_processes() {
         if (WIFEXITED(status)) {
             printf("hw1shell: pid %d finished with status: %d\n", pid, WEXITSTATUS(status));
         }
+        
+        printf("pid is: %d\n",pid);
         running_cmds--; // Decrement the background command counter
     }
 }
