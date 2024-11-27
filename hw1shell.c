@@ -1,192 +1,194 @@
-// tests:
-// sleep 25 &
-
-//to fix:
-// printing forground... when prompt is pwd. it doent suppoust to.
-
 #include "hw1shell.h"
 
-
 int running_cmds = 0;
- 
+
 int main() {
     char input[BUFFER_SIZE];
     char *tokens[MAX_TOKENS]; // define token array for parsing input from user
     int token_count = 0;
     bool is_background;
     ps* head = NULL;
- 
-    token_count = 0;
-    memset(tokens, 0, sizeof(tokens)); // making sure array is clean
 
     while (1) {
         is_background = false;
         printf("hw1shell$ ");
         fgets(input, BUFFER_SIZE, stdin);
-        // parse input to cmd and directory
+
         input[strcspn(input, "\n")] = '\0'; // removes new line symbol from input
-        char *token = strtok(input, " "); // taken first token out of input
+        token_count = 0;
+        memset(tokens, 0, sizeof(tokens));
+
+        // parse input to cmd and directory
+        char *token = strtok(input, " "); // take the first token out of input
         while (token != NULL && token_count < MAX_TOKENS) { // saving all the tokens from the user
             tokens[token_count++] = token; // Store token pointer in the array
-            token = strtok(NULL, " ");    // NULL tells strtok to continue parsing the same string
+            token = strtok(NULL, " "); // NULL tells strtok to continue parsing the same string
         }
+
         if (token_count == 0) { // if user put a empty line, continue loop
             continue;
         }
-        if (!strcmp(tokens[0],"cd")){ // change directory
-            printf("Changing directory...\n");
-            cd(tokens[1]);
-        }
-        else if (!strcmp(tokens[0],"jobs")) { // display processes
-            printf("Displaying processes...\n");
-            jobs(head);
-        }
-        else if (!strcmp(tokens[0],"exit")){ // exit shell
-            printf("Exiting shell...\n");
+
+        if (!strcmp(tokens[0], "exit")) { // exit shell
             exit_shell(head);
             break;
-        }
-        else{
-            if (strcmp(tokens[token_count - 1], "&") == 0) { // check if it is a background command
-                tokens[token_count - 1] = NULL; // we dont want this to be a problem later
-                token_count -= 1;
-                is_background = true;
-                }
-            execute_cmd(tokens, is_background, head); // if the user didn't input any of the internal commands, execute the command
+        } else if (!strcmp(tokens[0], "cd")) { // change directory
+            if (token_count < 2) {
+                fprintf(stderr, "hw1shell: cd: missing argument\n");
+            } else {
+                cd(tokens[1]);
             }
-        //reap_background_processes(); //fic to handle zombies only
-        //is_background = 0; // restart variable
+        } else if (!strcmp(tokens[0], "jobs")) { // display processes
+            jobs(head);
         }
+        else {
+
+            if (!strcmp(tokens[token_count - 1], "&")) { // check if it is a background command
+                tokens[--token_count] = NULL; // we dont want this to be a problem later
+                is_background = true;
+            }
+
+            execute_cmd(tokens, is_background, &head); // if the user didn't input any of the internal commands, execute the command
+        }
+        reap_background_processes(&head); // reap zombies
+    }
+
     return 0;
 }
 
 // executes external command
-//TO FIX - parsing cmd with & , removing it 
-void execute_cmd(char* tokens[], bool is_background, ps* head){
+void execute_cmd(char *tokens[], bool is_background, ps **head) {
     if (is_background && running_cmds >= MAX_BG_CMD) { // not sure it needs to be here!
         fprintf(stderr, "hw1shell: too many background commands running\n");
         return;
     }
 
-    pid_t pid = fork(); // duplicate current process and return its PID 
-    if (pid < 0){ // fork faild
-        printf("hw1shell: fork faild\n");
-        fprintf(stderr, "hw1shell: %s failed, errno is %d\n", "fork", errno);
-    }
-    else if(pid == 0){ // the process is a child
-        if (execvp(tokens[0], tokens) == -1) { // execute command using execvp
-            printf("hw1shell: invalid command\n");
-            // add exec kill pid, because of fork, with get pid. suecide
-            fprintf(stderr, "hw1shell: %s failed, errno is %d\n", "execvp", errno);
+    // save full command to print in jobs later
+    char full_command[BUFFER_SIZE] = {0};
+    for (int i = 0; tokens[i] != NULL; i++) {
+        strncat(full_command, tokens[i], BUFFER_SIZE - strlen(full_command) - 1);
+        if (tokens[i + 1] != NULL) { // Add space between tokens
+            strncat(full_command, " ", BUFFER_SIZE - strlen(full_command) - 1);
         }
     }
-    else{ // the process is a parent
+
+    pid_t pid = fork(); // duplicate current process and return its PID 
+    if (pid < 0) { // fork faild
+        printf("hw1shell: %s failed, errno is %d\n", "fork", errno);
+    } else if (pid == 0) { // the process is a child
+        if (execvp(tokens[0], tokens) == -1) {
+            printf("hw1shell: invalid command\n");
+            printf("hw1shell: %s failed, errno is %d\n", "execvp", errno);
+            exit(1);
+        }
+    } else { // the process is a parent
         if (is_background) { // Background process: do not wait
-        printf("hw1shell: pid %d started,\n", pid);
-        add_ps(tokens[0],pid,head);
-        running_cmds++; // Increment background process count
+            printf("hw1shell: pid %d started\n", pid);
+            add_ps(full_command, pid, head); // Pass the full command to add_ps
+            running_cmds++; // Increment background process count
         } else {
         // Foreground process: wait for the child to finish
-        int status;
-        if (waitpid(pid, &status, 0) == -1) {
-            fprintf(stderr, "hw1shell: %s failed, errno is %d\n", "waitpid", errno);
-        } else if (WIFEXITED(status)) {
-            printf("Foreground process (PID: %d) exited with status: %d\n", pid, WEXITSTATUS(status));
+            int status;
+            if (waitpid(pid, &status, 0) == -1) {
+                printf("hw1shell: %s failed, errno is %d\n", "waitpid", errno);
+            }
+            else if (WIFEXITED(status)) {
+                // do nothing
             }
         }
     }
 }
 
-void add_ps(const char* cmd, int pid, ps* head){
-    ps* new_node = (ps*)malloc(sizeof(ps));
+// add process to linked list
+void add_ps(const char *cmd, int pid, ps **head) {
+    ps *new_node = (ps *)malloc(sizeof(ps));
     if (new_node == NULL) {
-        perror("Failed to allocate memory for the new node");
+        printf("hw1shell: %s failed, errno is %d\n", "malloc", errno);
         return;
     }
 
-    // Initialize the new node
-    strcpy(new_node->command,cmd);
+    strncpy(new_node->command, cmd, CMD_SIZE - 1); 
+    new_node->command[CMD_SIZE - 1] = '\0';        
     new_node->pid = pid;
     new_node->next = NULL;
 
-    // If the list is empty, make the new node the head
-    if (head == NULL) {
-        head = new_node;
-        return;
+    if (*head == NULL) {
+        *head = new_node;
+    } else {
+        ps *current = *head;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = new_node;
     }
-
-    // Traverse the list to find the last node
-    ps* current = head;
-    while (current->next != NULL) {
-        current = current->next;
-    }
-
-    // Add the new node at the end of the list
-    current->next = new_node;
 }
 
 // causes the shell process to change its working directory
-void cd(const char* dir){
-    if (chdir(dir)==-1){
-        perror("hw1shell: invalid command\n");
-        fprintf(stderr, "hw1shell: %s failed, errno is %d\n", "chdir", errno);
+void cd(const char *dir) {
+    if (chdir(dir) == -1) {
+        printf("hw1shell: %s failed, errno is %d\n", "chdir", errno);
     }
 }
 
-// display running processes
-void jobs(ps* head) {
-    ps* current = head;
-
-    if (!current) {
+// display running back ground processes
+void jobs(ps *head) {
+    if (head == NULL) {
         printf("No background processes.\n");
         return;
     }
 
     printf("PID\tCommand\n");
-    while (current) { // loop through linked list and display processes
+    ps *current = head;
+    while (current != NULL) {
         printf("%d\t%s\n", current->pid, current->command);
         current = current->next;
     }
 }
 
-// exit() reaps children and cleans up dynamic memory
-void exit_shell(ps* head){
-    // reap children
+void reap_background_processes(ps **head) {
     pid_t pid;
     int status;
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) { // run a loop that wait for all children to be reaped, if the PID is a positive number it means we got the PID of the terminated child
+
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (WIFEXITED(status)) {
+            printf("hw1shell: pid %d finished\n", pid);
+        }
+
+        // Remove process from linked list
+        ps **current = head;
+        while (*current != NULL) {
+            if ((*current)->pid == pid) {
+                ps *temp = *current;
+                *current = (*current)->next;
+                free(temp);
+                running_cmds--;
+                break;
+            }
+            current = &((*current)->next);
+        }
+    }
+}
+
+// exit() reaps children and cleans up dynamic memory
+void exit_shell(ps *head) {
+    pid_t pid;
+    int status;
+
+    // reap children
+    while ((pid = waitpid(-1, &status, 0)) > 0) { // run a loop that wait for all children to be reaped, if the PID is a positive number it means we got the PID of the terminated child
     // -1 means it waits for any child process
     // it saves the status of the child in the variable status
     // WNOHANG Ensures the function does not block if there are no child processes to wait for
         if (WIFEXITED(status)) {
-            printf("Reaped child process (PID: %d) with status: %d\n", pid, WEXITSTATUS(status));
-            }
-    }
-
-    // clean up dynamic memory if we created it
-    ps* current = head;
-    ps* temp = NULL;
-    while (current) { // loop through linked list and free memory
-        temp = current->next;
-        free(current);
-        current = temp;
-    }
-    printf("freed memory\n");
-}
-
-//why we need this and not only the exit? like when do we want to reap all bg proccess when we font exit?
-void reap_background_processes() {
-    pid_t pid;
-    int status;
-
-    // Check and reap all completed background processes
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        if (WIFEXITED(status)) {
-            printf("hw1shell: pid %d finished with status: %d\n", pid, WEXITSTATUS(status));
+            printf("hw1shell: pid %d finished\n", pid);
         }
-        
-        printf("pid is: %d\n",pid);
-        running_cmds--; // Decrement the background command counter
+    }
+
+    // free memory
+    ps *current = head;
+    while (current != NULL) {
+        ps *temp = current;
+        current = current->next;
+        free(temp);
     }
 }
-
