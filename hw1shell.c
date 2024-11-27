@@ -14,12 +14,13 @@ int main() {
     char input[BUFFER_SIZE];
     char *tokens[MAX_TOKENS]; // define token array for parsing input from user
     int token_count = 0;
-    //bool not_exit = true;
+    bool is_background;
  
     token_count = 0;
     memset(tokens, 0, sizeof(tokens)); // making sure array is clean
 
     while (1) {
+        is_background = false;
         printf("hw1shell$ ");
         fgets(input, BUFFER_SIZE, stdin);
         // parse input to cmd and directory
@@ -48,19 +49,19 @@ int main() {
         }
         else{
             if (strcmp(tokens[token_count - 1], "&") == 0) { // check if it is a background command
-                is_background = 1;
+                is_background = true;
                 }
-            execute_cmd(tokens); // if the user didn't input any of the internal commands, execute the command
+            execute_cmd(tokens, is_background); // if the user didn't input any of the internal commands, execute the command
             }
-        reap_background_processes();
-        is_background = 0; // restart variable
+        //reap_background_processes();  i dont think we need this here, only before exit.
+        //is_background = 0; // restart variable
         }
     return 0;
 }
 
 // executes external command
 //TO FIX - parsing cmd with & , removing it 
-void execute_cmd(char* tokens[]){
+void execute_cmd(char* tokens[], bool is_background){
     if (is_background && running_cmds >= MAX_BG_CMD) { // not sure it needs to be here!
         fprintf(stderr, "hw1shell: too many background commands running\n");
         return;
@@ -143,6 +144,7 @@ void exit_shell(){
     printf("freed memory\n");
 }
 
+//why we need this and not only the exit? like when do we want to reap all bg proccess when we font exit?
 void reap_background_processes() {
     pid_t pid;
     int status;

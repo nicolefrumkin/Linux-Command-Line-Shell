@@ -16,7 +16,7 @@
 void cd(const char* dir);
 void jobs();
 void exit_shell();
-void execute_cmd(char* tokens[]);
+void execute_cmd(char* tokens[],bool is_background);
 void reap_background_processes();
 
 typedef struct process {
