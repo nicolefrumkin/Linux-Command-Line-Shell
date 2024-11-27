@@ -13,14 +13,16 @@
 #define MAX_TOKENS 64
 #define CMD_SIZE 256
 
-void cd(const char* dir);
-void jobs();
-void exit_shell();
-void execute_cmd(char* tokens[],bool is_background);
-void reap_background_processes();
-
 typedef struct process {
     int pid;
     char command[CMD_SIZE];
     struct process* next;
 } ps;
+
+void cd(const char* dir);
+void jobs(ps* head);
+void exit_shell(ps* head);
+void execute_cmd(char* tokens[],bool is_background, ps* head);
+void reap_background_processes();
+void add_ps(const char* cmd, int pid, ps* head);
+

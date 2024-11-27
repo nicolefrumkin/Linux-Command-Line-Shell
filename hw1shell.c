@@ -6,15 +6,15 @@
 
 #include "hw1shell.h"
 
-ps* head = NULL;
+
 int running_cmds = 0;
-int is_background = 0;
  
 int main() {
     char input[BUFFER_SIZE];
     char *tokens[MAX_TOKENS]; // define token array for parsing input from user
     int token_count = 0;
     bool is_background;
+    ps* head = NULL;
  
     token_count = 0;
     memset(tokens, 0, sizeof(tokens)); // making sure array is clean
@@ -33,27 +33,28 @@ int main() {
         if (token_count == 0) { // if user put a empty line, continue loop
             continue;
         }
-
         if (!strcmp(tokens[0],"cd")){ // change directory
             printf("Changing directory...\n");
             cd(tokens[1]);
         }
         else if (!strcmp(tokens[0],"jobs")) { // display processes
             printf("Displaying processes...\n");
-            jobs();
+            jobs(head);
         }
         else if (!strcmp(tokens[0],"exit")){ // exit shell
             printf("Exiting shell...\n");
-            exit_shell();
+            exit_shell(head);
             break;
         }
         else{
             if (strcmp(tokens[token_count - 1], "&") == 0) { // check if it is a background command
+                tokens[token_count - 1] = NULL; // we dont want this to be a problem later
+                token_count -= 1;
                 is_background = true;
                 }
-            execute_cmd(tokens, is_background); // if the user didn't input any of the internal commands, execute the command
+            execute_cmd(tokens, is_background, head); // if the user didn't input any of the internal commands, execute the command
             }
-        //reap_background_processes();  i dont think we need this here, only before exit.
+        //reap_background_processes(); //fic to handle zombies only
         //is_background = 0; // restart variable
         }
     return 0;
@@ -61,7 +62,7 @@ int main() {
 
 // executes external command
 //TO FIX - parsing cmd with & , removing it 
-void execute_cmd(char* tokens[], bool is_background){
+void execute_cmd(char* tokens[], bool is_background, ps* head){
     if (is_background && running_cmds >= MAX_BG_CMD) { // not sure it needs to be here!
         fprintf(stderr, "hw1shell: too many background commands running\n");
         return;
@@ -82,6 +83,7 @@ void execute_cmd(char* tokens[], bool is_background){
     else{ // the process is a parent
         if (is_background) { // Background process: do not wait
         printf("hw1shell: pid %d started,\n", pid);
+        add_ps(tokens[0],pid,head);
         running_cmds++; // Increment background process count
         } else {
         // Foreground process: wait for the child to finish
@@ -95,6 +97,34 @@ void execute_cmd(char* tokens[], bool is_background){
     }
 }
 
+void add_ps(const char* cmd, int pid, ps* head){
+    ps* new_node = (ps*)malloc(sizeof(ps));
+    if (new_node == NULL) {
+        perror("Failed to allocate memory for the new node");
+        return;
+    }
+
+    // Initialize the new node
+    strcpy(new_node->command,cmd);
+    new_node->pid = pid;
+    new_node->next = NULL;
+
+    // If the list is empty, make the new node the head
+    if (head == NULL) {
+        head = new_node;
+        return;
+    }
+
+    // Traverse the list to find the last node
+    ps* current = head;
+    while (current->next != NULL) {
+        current = current->next;
+    }
+
+    // Add the new node at the end of the list
+    current->next = new_node;
+}
+
 // causes the shell process to change its working directory
 void cd(const char* dir){
     if (chdir(dir)==-1){
@@ -104,7 +134,7 @@ void cd(const char* dir){
 }
 
 // display running processes
-void jobs() {
+void jobs(ps* head) {
     ps* current = head;
 
     if (!current) {
@@ -120,7 +150,7 @@ void jobs() {
 }
 
 // exit() reaps children and cleans up dynamic memory
-void exit_shell(){
+void exit_shell(ps* head){
     // reap children
     pid_t pid;
     int status;
