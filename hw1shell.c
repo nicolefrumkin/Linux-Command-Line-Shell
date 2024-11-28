@@ -97,9 +97,6 @@ void execute_cmd(char *tokens[], bool is_background, ps **head) {
             if (waitpid(pid, &status, 0) == -1) {
                 printf("hw1shell: %s failed, errno is %d\n", "waitpid", errno);
             }
-            else if (WIFEXITED(status)) {
-                // do nothing
-            }
         }
     }
 }
