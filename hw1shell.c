@@ -5,6 +5,7 @@ int running_cmds = 0;
 int main() {
     char input[BUFFER_SIZE];
     char *tokens[MAX_TOKENS]; // define token array for parsing input from user
+    char last_char;
     int token_count = 0;
     bool is_background;
     ps* head = NULL;
@@ -13,23 +14,23 @@ int main() {
         is_background = false;
         printf("hw1shell$ ");
         fgets(input, BUFFER_SIZE, stdin);
-
         input[strcspn(input, "\n")] = '\0'; // removes new line symbol from input
         token_count = 0;
-        memset(tokens, 0, sizeof(tokens));
-
+        memset(tokens, 0, sizeof(tokens)); // clean tokens memory
         // parse input to cmd and directory
         char *token = strtok(input, " "); // take the first token out of input
+//      
         while (token != NULL && token_count < MAX_TOKENS) { // saving all the tokens from the user
             tokens[token_count++] = token; // Store token pointer in the array
             token = strtok(NULL, " "); // NULL tells strtok to continue parsing the same string
         }
 
         if (token_count == 0) { // if user put a empty line, continue loop
+            reap_background_processes(&head); // if we got \n and we have finshed bg process
             continue;
         }
 
-        if (!strcmp(tokens[0], "exit")) { // exit shell
+        if (!strcmp(tokens[0], "exit")) { // exit shell with exit shell function, break main loop
             exit_shell(head);
             break;
         } else if (!strcmp(tokens[0], "cd")) { // change directory
@@ -42,12 +43,16 @@ int main() {
             jobs(head);
         }
         else {
-
-            if (!strcmp(tokens[token_count - 1], "&")) { // check if it is a background command
-                tokens[--token_count] = NULL; // we dont want this to be a problem later
+            last_char = tokens[token_count - 1][strlen(tokens[token_count - 1])-1];
+            if(last_char == '&'){
+                if(!strcmp(tokens[token_count - 1], "&")){ // means its only &
+                     tokens[--token_count] = NULL; 
+                }
+                else{
+                    tokens[token_count - 1][strlen(tokens[token_count - 1])-1] = '\0';
+                }
                 is_background = true;
             }
-
             execute_cmd(tokens, is_background, &head); // if the user didn't input any of the internal commands, execute the command
         }
         reap_background_processes(&head); // reap zombies
@@ -106,6 +111,7 @@ void add_ps(const char *cmd, int pid, ps **head) {
         printf("hw1shell: %s failed, errno is %d\n", "malloc", errno);
         return;
     }
+
 
     strncpy(new_node->command, cmd, CMD_SIZE - 1); 
     new_node->command[CMD_SIZE - 1] = '\0';        
