@@ -19,7 +19,7 @@ int main() {
         memset(tokens, 0, sizeof(tokens)); // clean tokens memory
         // parse input to cmd and directory
         char *token = strtok(input, " "); // take the first token out of input
-//      
+    
         while (token != NULL && token_count < MAX_TOKENS) { // saving all the tokens from the user
             tokens[token_count++] = token; // Store token pointer in the array
             token = strtok(NULL, " "); // NULL tells strtok to continue parsing the same string
@@ -35,7 +35,7 @@ int main() {
             break;
         } else if (!strcmp(tokens[0], "cd")) { // change directory
             if (token_count < 2) {
-                fprintf(stderr, "hw1shell: cd: missing argument\n");
+                printf("hw1shell: cd: missing argument\n");
             } else {
                 cd(tokens[1]);
             }
@@ -64,7 +64,7 @@ int main() {
 // executes external command
 void execute_cmd(char *tokens[], bool is_background, ps **head) {
     if (is_background && running_cmds >= MAX_BG_CMD) { // not sure it needs to be here!
-        fprintf(stderr, "hw1shell: too many background commands running\n");
+        printf("hw1shell: too many background commands running\n");
         return;
     }
 
@@ -80,26 +80,59 @@ void execute_cmd(char *tokens[], bool is_background, ps **head) {
     pid_t pid = fork(); // duplicate current process and return its PID 
     if (pid < 0) { // fork faild
         printf("hw1shell: %s failed, errno is %d\n", "fork", errno);
-    } else if (pid == 0) { // the process is a child
+        return;
+     }
+    else if (pid > 0) { // Parent process
+        usleep(50000);
+        int status; 
+        if (is_background) {
+            // Check if the child process exits immediately due to execvp failure
+            pid_t result = waitpid(pid, &status, WNOHANG); // Non-blocking wait
+            if (result == pid && WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+                // Child exited with an error
+                return;
+            }
+
+            // Otherwise, add to background processes
+            printf("hw1shell: pid %d started\n", pid);
+            add_ps(full_command, pid, head);
+            running_cmds++;
+        } else {
+            // Foreground process: wait for the child
+            if (waitpid(pid,&status, 0) == -1) {
+                printf("hw1shell: waitpid failed, errno is %d\n", errno);
+            }
+        }
+    } else { // Child process
+        // Attempt to execute the command
         if (execvp(tokens[0], tokens) == -1) {
             printf("hw1shell: invalid command\n");
-            printf("hw1shell: %s failed, errno is %d\n", "execvp", errno);
-            exit(1);
-        }
-    } else { // the process is a parent
-        if (is_background) { // Background process: do not wait
-            printf("hw1shell: pid %d started\n", pid);
-            add_ps(full_command, pid, head); // Pass the full command to add_ps
-            running_cmds++; // Increment background process count
-        } else {
-        // Foreground process: wait for the child to finish
-            int status;
-            if (waitpid(pid, &status, 0) == -1) {
-                printf("hw1shell: %s failed, errno is %d\n", "waitpid", errno);
-            }
+            printf("hw1shell: execvp failed, errno is %d\n", errno);
+            exit(1); // Exit with an error code
         }
     }
 }
+
+//     } else if (pid == 0) { // the process is a child
+//         if (execvp(tokens[0], tokens) == -1) {
+//             printf("hw1shell: invalid command\n");
+//             printf("hw1shell: %s failed, errno is %d\n", "execvp", errno);
+//             exit(1);
+//         }
+//     } else { // the process is a parent
+//         if (is_background) { // Background process: do not wait
+//             printf("hw1shell: pid %d started\n", pid);
+//             add_ps(full_command, pid, head); // Pass the full command to add_ps
+//             running_cmds++; // Increment background process count
+//         } else {
+//         // Foreground process: wait for the child to finish
+//             int status;
+//             if (waitpid(pid, &status, 0) == -1) {
+//                 printf("hw1shell: %s failed, errno is %d\n", "waitpid", errno);
+//             }
+//         }
+//     }
+// }
 
 // add process to linked list
 void add_ps(const char *cmd, int pid, ps **head) {
