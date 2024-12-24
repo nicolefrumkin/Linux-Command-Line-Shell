@@ -1,6 +1,6 @@
-# HW1Shell
+# Shell
 
-HW1Shell is a simple Linux shell written in C. It supports basic commands, including:
+Shell is a simple Linux shell written in C. It supports basic commands, including:
 
 - **Internal commands**: `exit`, `cd`, `jobs`.
 - **External commands**: Runs standard Linux commands using `fork` and `exec`.
