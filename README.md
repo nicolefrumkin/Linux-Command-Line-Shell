@@ -22,5 +22,3 @@ To remove compiled files, run:
 ```bash
 make clean
 ``` 
-
-Enjoy using HW1Shell!
